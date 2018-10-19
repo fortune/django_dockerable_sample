@@ -1,0 +1,27 @@
+version: '2'
+
+# Django 付属の manage.py runserver で起動するコンテナと PostgreSQL を管理する。
+services:
+  runserver:
+    image: django-dockerable-sample:1.0
+    build:
+      context: ../../
+      dockerfile: dockerable/fortune/Dockerfile
+
+    ports:
+      - "80:8000"
+    environment:
+      DJANGO_SETTINGS_MODULE: project.settings.fortune.settings
+      ENV: DEV
+    volumes:
+      - ../..:/app:ro
+    links:
+      - postgres
+  
+  postgres:
+    image: postgres:10.5-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: "my_password"
+      POSTGRES_DB: "my_db"
