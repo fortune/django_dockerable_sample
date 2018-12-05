@@ -1,11 +1,14 @@
 # Dockerable Django Project
 
 Django アプリケーションを Docker コンテナ上で動かすサンプル。データベースも Docker コンテナで動かし、Django が動いている
-コンテナと Link させることにする。秘匿すべき設定情報の扱い方についても書く。
+コンテナと Link させることにする。
+
+本番環境、ステージング、開発者ごとの環境のような環境ごとの設定は個別化し、必要な部分は秘匿化する一方で、共通のコンテナイメージを
+作成することにする。したがって、コンテナ実行時に環境を指定する。
 
 まず、
 [Django Tutorial](https://github.com/fortune/django-tutorial#%E3%83%97%E3%83%AD%E3%82%B8%E3%82%A7%E3%82%AF%E3%83%88%E3%82%92%E4%BD%9C%E6%88%90%E3%81%99%E3%82%8B)
-にならってプロジェクトを作成する。
+にならって空のプロジェクトを作成する。
 
 
 ## Visual Studio Code の設定
@@ -66,9 +69,8 @@ project/
 共通の設定を `base.py` に残し、本番環境やステージング環境、または各開発者ごとの環境は、`settings` ディレクトリ下に
 環境ごとのディレクトリをつくって、そこに記述する。ここでは、`fortune` ユーザ用の環境として、`fortune` ディレクトリを
 作った。データベースへの接続パスワードや、認証トークンなど、秘密にすべき情報は `secrets.json` に定義してそこから読み出すようにする。
-本番環境やステージング環境用の `secrets.json` はバージョン管理システムに登録すべきではないので、`.gitignore` にそれらは
-無視するように記述しておく。
-にする。
+秘密情報が入った `secrets.json` はバージョン管理システムに登録すべきではないので、`.gitignore` にそれらは
+無視するように記述しておく（`fortune` ユーザのはサンプルのため、例外として登録してある）。
 
 
 ## Django の起動
@@ -103,7 +105,7 @@ Docker を使う。
 $ docker pull postgres:10.5-alpine
 ```
 
-次のように実行する。
+次のように起動できる。ここでは何の設定もしないが、実際には、起動後、必要な設定をし、イメージを保存するのだろう。
 
 ```shell
 $ docker run --name some-postgres \     # 実行時のコンテナ名
@@ -115,7 +117,7 @@ $ docker run --name some-postgres \     # 実行時のコンテナ名
 ```
 
 ユーザ名は指定してないので、デフォルトの `postgres` が使われる。コンテナ同士で Link するだけなら -p オプションで
-ホストとコンテナのポートをつなげる必要はないが、こうしたのは、後でコンテナを使わずに runserver したときのためだ。
+ホストとコンテナのポートをつなげる必要はないが、こうしたのは、後でコンテナを使わずに Django を runserver するときのためだ。
     
 こうすると、
 
@@ -125,7 +127,7 @@ CONTAINER ID        IMAGE                  COMMAND                  CREATED     
 842c3a63089b        postgres:10.5-alpine   "docker-entrypoint.s…"   16 minutes ago      Up 16 minutes       5432/tcp            some-postgres
 ```
 
-のようになるのだが、Docker の link を使って、ここに接続できる。
+のようになる。このコンテナに Docker の link を使って、接続できる。
 
 ```shell
 $ docker run -it --rm \
@@ -145,19 +147,20 @@ POSTGRES_ENV_PG_SHA256=6c8e616c91a45142b85c0aeb1f29ebba4a361309e86469e0fb4617b6a
 POSTGRES_ENV_PGDATA=/var/lib/postgresql/data
 ```
 
-このように、指定した `postgres` というエイリアスをプリフィックスにした環境変数がコンテナに渡されている。psql コマンドでつなぐには、
+指定した `postgres` というエイリアスをプリフィックスにした環境変数がコンテナに渡されており、このコンテナから先の PostgreSQL の
+コンテナに接続できる。psql コマンドでつなぐには、
 
 ```shell
 $ docker run -it --rm \
              --link some-postgres:postgres \
              postgres:10.5-alpine \
-             psql -h postgres   # DB ホスト名
+             psql -h postgres \   # DB ホスト名
              -U postgres    # ユーザ名
 ```
 
 のようにする。psql コマンドの -h オプションで指定するホスト名は、docker の --link オプションで指定したエイリアス名である。
-psql コマンドの -U オプションでデフォルトユーザの postgres を指定している。パスワードを聞かれるので、PostgreSQL をコンテナで実行したときに
-`POSTGRES_PASSWORD` 環境変数で指定したパスワードを入力する。
+psql コマンドの -U オプションでデフォルトユーザの postgres を指定している。パスワードを聞かれるので、PostgreSQL をコンテナで
+実行したときに `POSTGRES_PASSWORD` 環境変数で指定したパスワードを入力する。
 
 
 ## Django アプリケーションから Docker コンテナ上の PostgreSQL へ接続する
@@ -213,8 +216,11 @@ DATABASES = {
 (myvenv) $ python manage.py runserver --settings=project.settings.fortune.settings
 ```
 
+起動された Django アプリは Docker コンテナとして実行中の PostgreSQL へ接続している。
 
-## Django アプリの Docker コンテナ化
+
+
+## Django アプリの Docker コンテナとしてビルドする
 
 開発者個人のマシンで動かすだけなら Django をコンテナ上で実行する必要はないだろうが、ステージングや本番環境で実行する場合、
 コンテナ化した方が都合がいい。
@@ -245,57 +251,99 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 を実行すれば、ベースディレクトリの `static/` ディレクトリ下に static ファイルが集約される。
 
-Docker まわりの設定をするためにベースディレクトリに `dockerable` ディレクトリを作成し、その下に環境ごとに
-ディレクトリを作成する。ここでは次のような構成にした。
+Docker イメージのビルド設定を格納するため、ベースディレクトリに `dockerable` ディレクトリを作成し、必要なファイルを作成する。
+
 
 ```shell
 $ tree dockerable
-dockerable
-└── fortune
-    ├── Dockerfile
-    ├── cmd.sh
-    └── ssl
-        ├── server.crt
-        ├── server.csr
-        └── server.key
+dockerable/
+├── Dockerfile
+├── cmd.sh
+└── docker-compose-build-only.yml
+
 ```
 
 `Dockerfile` に Django アプリケーション用の Docker イメージを作成する手順を記述し、cmd.sh はサービス実行のためのスクリプトであり、
-ssl/ ディレクトリには HTTPS 接続のための証明書ファイルを置く。
+`docker-compose-build-only.yml` は、`docker-compose` ツールを使ってビルドするときのためのファイル。イメージをひとつだけ作成するので
+こうしているが、もし、複数のイメージを作成するなら、イメージごとにディレクトリをつくり、その中に作成すべきだろう。
 
-HTTP 接続用に自己署名の証明書をつくっておこう。
+では、ビルドしよう。次のコマンドを実行する。
 
 ```shell
-$ openssl genrsa 2024 >dockerable/fortune/ssl/server.key
-$ openssl req -new -key dockerable/fortune/ssl/server.key >dockerable/fortune/ssl/server.csr
-$ openssl x509 -req -days 3650 -signkey dockerable/fortune/ssl/server.key  <dockerable/fortune/ssl/server.csr >dockerable/fortune/ssl/server.crt
+$ docker build -t django-dockerable-sample:1.0 -f dockerable/Dockerfile .
+```
+
+`dockerable/Dockerfile` と `.dockerignore` により、
+
+- コンテナの /app/ に Django アプリをコピーするが、
+- dockerable/ 以下と project/settings/ 下の base.py 以外はイメージに入らないようにし、
+- dockerable/cmd.sh を コンテナ上の /cmd.sh へコピーする。
+
+ようにしている。これにより、秘密にすべき情報や個別の環境がイメージに入らないようにしている。
+
+ビルドするとき、いちいちタグ名を指定するのも面倒なので、docker-compose ツールを使う方がいい。ビルドだけに使うための
+`docker-compose-build-only.yml` も作成したので、それを指定して実行する。
+
+```shell
+$ docker-compose -f dockerable/docker-compose-build-only.yml build
+```
+
+ここで作成したコンテナイメージを本番、ステージング、開発者個人の環境で共通して使用する。環境ごとの違いは実行時に指定する。
+
+
+## Docker コンテナ化した Django アプリ実行用の環境を作成する
+
+`project/settings/` 以下に環境ごとのディレクトリを作成し、そこで環境固有の Django 設定をするのだった。さらに
+Docker コンテナを実行するときの環境もそこに作成する。そういうわけで、`project/settings/fortune/` 以下は次のようになる。
+
+```shell
+$ tree fortune
+fortune/
+├── __init__.py
+├── docker-compose-dev.yml
+├── docker-compose.yml
+├── secrets.json
+├── settings.py
+└── ssl
+    ├── server.crt
+    ├── server.csr
+    └── server.key
+```
+
+`docker-compose.yml` は、先程作成した Django コンテナイメージを docker-compose で実行するための yaml ファイル。
+`docker-compose-dev.yml` も同様だが、開発モードで実行するときの設定を記述した yaml ファイル。ssl/ 以下には
+HTTPS 接続用の SSL 証明書を格納しているが、これらは自己署名で次のように作成した。
+
+```shell
+$ openssl genrsa 2024 >project/settings/fortune/ssl/server.key
+$ openssl req -new -key project/settings/fortune/ssl/server.key >project/settings/fortune/ssl/server.csr
+$ openssl x509 -req -days 3650 -signkey project/settings/fortune/ssl/server.key  <project/settings/fortune/ssl/server.csr >project/settings/fortune/ssl/server.crt
 ```
 
 FQDN は `fortune.django-dockerable-sample.com` としよう。
 
-では、Docker のイメージを作成する。イメージ名は、`django-dockerable-sample:1.0` とする。ビルドコンテキストは、Django のベースディレクトリだ。
-次のコマンドを実行する。
+
+
+## Docker コンテナ化した Django アプリを開発モードで実行する
+
+開発モード、つまり、コンテナ上で Django を runserver で実行するやり方。
+
+まず、PostgreSQL コンテナを起動しておく。
 
 ```shell
-$ docker build -t django-dockerable-sample:1.0 -f dockerable/fortune/Dockerfile .
+$ docker run --name some-postgres \     # 実行時のコンテナ名
+             -e POSTGRES_PASSWORD=my_password \     # 使用するパスワードを環境変数で渡す
+             -e POSTGRES_DB=my_db \     # 使用するデータベース名
+             # -p 5432:5432 \     # ホストとコンテナの 5432 ポートをつなぐ
+             -d \       # Detached モード、つまりバックグラウンドでコンテナを実行
+             postgres:10.5-alpine
 ```
 
-`dockerable/fortune/Dockerfile` とビルドコンテクストにおいた `.dockerignore` により、
+PostgreSQL へはコンテナ同士のリンクで接続するので、-p オプションでホスト上のポートとつなげる必要はない。
 
-- コンテナの /app/ に Django アプリをコピーするが、
-- dockerable/ 以下と project/settings/fortune は除くようにし、
-- dockerable/fortune/cmd.sh を /cmd.sh へコピーする。
+次に、Docker イメージとしてビルドしておいた Django アプリを起動する。
 
-ようにしている。これにより、秘密にすべき設定情報や ssl 情報等がイメージに入らないようにしている。個人の開発環境なら問題はないだろうが、
-本番環境などではこれが重要になる。
-
-作成したイメージを使って Django アプリケーションをコンテナ上で実行するには次のようにする。
-
-まず、PostgreSQL をコンテナ上で実行しておく必要がある。方法は前述のとおり。
-
-コンテナ上で manage.py runserver を実行するなら、ベースディレクトリ上で
-
- ```shell
+```shell
 $ docker run --link some-postgres:postgres \
              -d \
              -p 80:8000 \
@@ -305,8 +353,22 @@ $ docker run --link some-postgres:postgres \
              django-dockerable-sample:1.0
 ```
 
-とする。ホストのポート 80 をコンテナのポート 8000 へつなげるようにしているので、ブラウザから http://localhost/ でアクセスできる。
+ホストのポート 80 をコンテナのポート 8000 へつなげるようにしているので、ブラウザから http://localhost/ でアクセスできる。
 また、コンテナの /app/ をホストの Django のベースディレクトリにマウントしているので、実行中にソースを変更すれば、web サーバが再起動される。
+
+これらの引数やオプションを入力するのは面倒なので、docker-compose を使うべき。そのための yaml ファイルは用意してあるので
+次のようにする。
+
+
+```shell
+$ docker-compose -f project/settings/fortune/docker-compose-dev.yml up -d
+```
+
+
+
+
+
+## Docker コンテナ化した Django アプリを本番モードで実行する
 
 uwsgi を実行して、https 接続できるようにコンテナを起動するなら次のようにする。
 
@@ -315,7 +377,7 @@ $ docker run --link some-postgres:postgres \
              -d \
              -p 443:443 \
              -v $PWD/project/settings/fortune:/app/project/settings/fortune:ro \
-             -v $PWD/dockerable/fortune/ssl:/ssl:ro \
+             -v $PWD/project/settings/fortune/ssl:/ssl:ro \
              -e DJANGO_SETTINGS_MODULE=project.settings.fortune.settings \
              django-dockerable-sample:1.0
 ```
@@ -324,45 +386,34 @@ Django の settings と ssl 証明書がコンテナ側から利用できるよ�
 FQDN として `fortune.django-dockerable-sample.com` を指定したので、
 https://fortune.django-dockerable-sample.com/ でアクセスする。/etc/hosts にこのドメイン名が localhost を指すように記述しておく。
 
-    
-## docker-compose の利用
-
-docker build するときや、docker run 時にコンテナ同士を適切に Link させたりするように、その都度、正しくオプション等を指定して
-実行するのは大変だし、そのために独自のソリューションとしてシェルスクリプトを書くのも面倒なので、そういうときは
-docker-compose を利用する。
+これも docker-compose を使うべき。次のようにする。
 
 ```shell
-$ tree dockerable
-dockerable
-└── fortune
-    ├── Dockerfile
-    ├── cmd.sh
-    ├── docker-compose-dev.yml
-    ├── docker-compose.yml
-    └── ssl
-        ├── server.crt
-        ├── server.csr
-        └── server.key
+$ docker-compose -f project/settings/fortune/docker-compose.yml up -d
 ```
 
-のように `docker-compose.yml` と `docker-compose-dev.yml` を作成した。前者は uwsgi 用、後者は manage.py runserver 用にコンテナを実行するための定義。
+
+## まとめ
+
+Django アプリケーションを Docker コンテナ化して実行するやり方をまとめた。基本的な方針は、
+
+- コンテナイメージはすべての環境で共通とし、ビルドに必要な設定のみ、*dockerable/* ディレクトリに格納する。
+- コンテナ実行方法も含めた、環境ごとの違いは、*project/settings/環境ごとのディレクトリ/* に定義し、これはコンテナイメージには含めない。
+
+とする。docker-compose.yml ファイルには build コマンドのための指定と実行方法の指定もすべて含めてしまうのが普通のようだが、
+そうはせずに分割しておく。こうすることで、イメージを共通化しつつ、環境ごとに実行方法を柔軟に変更できる。
+
+ホストにデプロイするときは、Docker コンテナイメージをホストに配置し、*環境ごとのディレクトリ/* 以下もホストに
+もっていく。たとえば、環境ごとのディレクトリが *staging/* ディレクトリならば、それを固めてホスト上にもっていって、
 
 ```shell
-$ docker-compose up -d
+$ docker-compose -f staging/docker-compose.yml up -d
 ```
 
-とすれば、デフォルトの docker-compose.yml が使われ、
-
-```shell
-$ docker-compose -f docker-compose-dev.yml up -d
-```
-
-のようにファイルを指定することもできる。
-
-双方とも django-dockerable-sample:1.0 イメージが存在しなければ build し、その後 run する。
+のようにすればよい。
 
 
+## 課題
 
-## ステージング、本番環境用に Nginx を利用する
-
+実際の運用では、Nginx をリバースプロキシとして使うだろう。また、SSL 証明書の自動更新等の設定も必要。
 

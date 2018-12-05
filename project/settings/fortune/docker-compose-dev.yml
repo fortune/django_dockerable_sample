@@ -4,9 +4,9 @@ version: '2'
 services:
   runserver:
     image: django-dockerable-sample:1.0
-    build:
-      context: ../../
-      dockerfile: dockerable/fortune/Dockerfile
+
+    # build 定義はここではしない。
+    # build:
 
     ports:
       - "80:8000"
@@ -14,7 +14,7 @@ services:
       DJANGO_SETTINGS_MODULE: project.settings.fortune.settings
       ENV: DEV
     volumes:
-      - ../..:/app:ro
+      - ../../..:/app:ro
     links:
       - postgres
   

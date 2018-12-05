@@ -9,16 +9,16 @@ services:
     # dockerfile は、ビルドコンテキストからのパスを指定する。
     #
     image: django-dockerable-sample:1.0
-    build:
-      context: ../../
-      dockerfile: dockerable/fortune/Dockerfile
+
+    # build 設定はここには書かない。
+    # build:
 
     ports:
       - "443:443"
     environment:
       DJANGO_SETTINGS_MODULE: project.settings.fortune.settings
     volumes:
-      - ../../project/settings/fortune:/app/project/settings/fortune:ro
+      - ./:/app/project/settings/fortune:ro
       - ./ssl:/ssl:ro
     links:
       - postgres
