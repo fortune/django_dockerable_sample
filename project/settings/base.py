@@ -48,9 +48,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.1/howto/deployment/checklist/
 
-# SECRET_KEY はサイトごとに変わるので、対応する個別の settings で定義する。
+# SECRET_KEY はサイトごとに変わるので、対応する個別の settings で定義し、VCS には登録しない。
+# ここで定義してある SECRET_KEY は実際のサイトでは使用しない。
+#
 # SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY = ''
+SECRET_KEY = 'o)dxms2b1t9+7$jt)t!nof891zyo0k-l@_!r)%q$p=b9@gn!)5'
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False

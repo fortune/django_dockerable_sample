@@ -87,7 +87,8 @@ settings を個別下したので、起動方法が異なる。runserver なら�
 (myvenv) $ DJANGO_SETTINGS_MODULE=project.settings.fortune.settings python manage.py runserver
 ```
 
-のようにする。
+のようにする。ただし、`manage.py` を修正して、デフォルトの settings として `project.settings.base` を使用するようにしてあるので、
+`base.py` に定義した設定だけで済む場合、たとえば、runserver でなく、shell の場合など、settings を指定しないでも起動できる。
 
 
 
