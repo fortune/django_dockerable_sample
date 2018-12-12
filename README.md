@@ -88,7 +88,7 @@ settings を個別下したので、起動方法が異なる。runserver なら�
 ```
 
 のようにする。ただし、`manage.py` を修正して、デフォルトの settings として `project.settings.base` を使用するようにしてあるので、
-`base.py` に定義した設定だけで済む場合、たとえば、runserver でなく、shell の場合など、settings を指定しないでも起動できる。
+`base.py` に定義した設定だけで済む場合、たとえば、runserver でなく、shell や collectstatic の場合など、settings を指定しないでも起動できる。
 
 
 
